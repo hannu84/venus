@@ -21,6 +21,10 @@ class MarstekApiError(Exception):
     """Raised when the Marstek API fails."""
 
 
+COMMAND_TIMEOUT = 15
+COMMAND_ATTEMPTS = 3
+
+
 class MarstekVenusAApi:
     """Simple UDP JSON-RPC client for Marstek Venus A."""
 
@@ -31,21 +35,7 @@ class MarstekVenusAApi:
 
     async def async_fetch_all(self, pv1_factor: float) -> dict[str, Any]:
         """Fetch the validated live values used by the integration."""
-        responses = {}
-        errors = {}
-        for method in (
-            METHOD_PV_STATUS,
-            METHOD_BAT_STATUS,
-            METHOD_EM_STATUS,
-            METHOD_ES_STATUS,
-            METHOD_ES_MODE,
-            METHOD_WIFI_STATUS,
-        ):
-            try:
-                responses[method] = await self._async_request(method)
-            except MarstekApiError as err:
-                responses[method] = {}
-                errors[method] = str(err)
+        responses, errors = await asyncio.to_thread(self._fetch_all_sync)
 
         if len(errors) == 6:
             raise MarstekApiError("; ".join(errors.values()))
@@ -96,35 +86,67 @@ class MarstekVenusAApi:
             },
         }
 
-    async def _async_request(self, method: str) -> Mapping[str, Any]:
-        """Perform one UDP JSON-RPC request."""
-        return await asyncio.to_thread(self._request, method)
-
-    def _request(self, method: str) -> Mapping[str, Any]:
-        self._request_id += 1
-        payload = {
-            "id": self._request_id,
-            "method": method,
-            "params": {"id": 0},
-        }
+    def _fetch_all_sync(self) -> tuple[dict[str, Mapping[str, Any]], dict[str, str]]:
+        responses: dict[str, Mapping[str, Any]] = {}
+        errors: dict[str, str] = {}
+        methods = (
+            METHOD_PV_STATUS,
+            METHOD_BAT_STATUS,
+            METHOD_EM_STATUS,
+            METHOD_ES_STATUS,
+            METHOD_ES_MODE,
+            METHOD_WIFI_STATUS,
+        )
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.settimeout(2.5)
+                sock.settimeout(COMMAND_TIMEOUT)
                 sock.bind(("0.0.0.0", self._port))
-                sock.sendto(json.dumps(payload).encode("utf-8"), (self._host, self._port))
-                data, _remote = sock.recvfrom(8192)
-        except TimeoutError as err:
-            raise MarstekApiError(f"Timeout while calling {method}") from err
+
+                for method in methods:
+                    try:
+                        responses[method] = self._request(sock, method)
+                    except MarstekApiError as err:
+                        responses[method] = {}
+                        errors[method] = str(err)
         except OSError as err:
-            raise MarstekApiError(f"Socket error while calling {method}: {err}") from err
+            raise MarstekApiError(f"Socket setup failed: {err}") from err
 
-        try:
-            response = json.loads(data.decode("utf-8"))
-        except json.JSONDecodeError as err:
-            raise MarstekApiError(f"Invalid JSON while calling {method}") from err
+        return responses, errors
 
-        if "error" in response:
-            raise MarstekApiError(response["error"].get("message", f"{method} failed"))
-        return response.get("result", {})
+    def _request(self, sock: socket.socket, method: str) -> Mapping[str, Any]:
+        self._request_id += 1
+        request_id = self._request_id
+        payload = {"id": request_id, "method": method, "params": {"id": 0}}
+        encoded_payload = json.dumps(payload).encode("utf-8")
+
+        last_error = None
+        for _attempt in range(COMMAND_ATTEMPTS):
+            sock.sendto(encoded_payload, (self._host, self._port))
+
+            while True:
+                try:
+                    data, remote = sock.recvfrom(8192)
+                except TimeoutError as err:
+                    last_error = err
+                    break
+                except OSError as err:
+                    raise MarstekApiError(f"Socket error while calling {method}: {err}") from err
+
+                if remote[0] != self._host:
+                    continue
+
+                try:
+                    response = json.loads(data.decode("utf-8"))
+                except json.JSONDecodeError:
+                    continue
+
+                if response.get("id") != request_id:
+                    continue
+
+                if "error" in response:
+                    raise MarstekApiError(response["error"].get("message", f"{method} failed"))
+                return response.get("result", {})
+
+        raise MarstekApiError(f"Timeout while calling {method}") from last_error
