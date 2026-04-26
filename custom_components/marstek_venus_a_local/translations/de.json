@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit Marstek Venus A verbinden",
+        "data": {
+          "device_host": "Geräte-IP",
+          "udp_port": "UDP-Port",
+          "pv1_power_factor": "PV1 Leistungsfaktor",
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen"
+    },
+    "abort": {
+      "already_configured": "Gerät ist bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Marstek Venus A Optionen",
+        "data": {
+          "pv1_power_factor": "PV1 Leistungsfaktor",
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": { "name": "Batterie-SOC" },
+      "battery_temperature": { "name": "Batterietemperatur" },
+      "pv1_power": { "name": "PV1 Leistung" },
+      "pv2_power": { "name": "PV2 Leistung" },
+      "pv3_power": { "name": "PV3 Leistung" },
+      "pv4_power": { "name": "PV4 Leistung" },
+      "pv_power_total": { "name": "PV Gesamtleistung" },
+      "grid_power": { "name": "Netzleistung" },
+      "offgrid_power": { "name": "Offgrid-Leistung" },
+      "meter_total_power": { "name": "Zähler Gesamtleistung" },
+      "total_grid_output_energy_wh": { "name": "Gesamt Netzausgabe" },
+      "total_grid_input_energy_wh": { "name": "Gesamt Netzbezug" },
+      "wifi_rssi": { "name": "WLAN RSSI" },
+      "operating_mode": { "name": "Betriebsmodus" }
+    }
+  }
+}
