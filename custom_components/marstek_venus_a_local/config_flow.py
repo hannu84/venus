@@ -84,11 +84,20 @@ class MarstekVenusALocalOptionsFlow(config_entries.OptionsFlow):
             {
                 vol.Required(
                     CONF_PV1_FACTOR,
-                    default=self.config_entry.options.get(CONF_PV1_FACTOR, self.config_entry.data[CONF_PV1_FACTOR]),
+                    default=self.config_entry.options.get(
+                        CONF_PV1_FACTOR,
+                        self.config_entry.data.get(CONF_PV1_FACTOR, DEFAULT_PV1_FACTOR),
+                    ),
                 ): vol.Coerce(float),
                 vol.Required(
                     CONF_SCAN_INTERVAL,
-                    default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data[CONF_SCAN_INTERVAL]),
+                    default=self.config_entry.options.get(
+                        CONF_SCAN_INTERVAL,
+                        self.config_entry.data.get(
+                            CONF_SCAN_INTERVAL,
+                            int(DEFAULT_SCAN_INTERVAL.total_seconds()),
+                        ),
+                    ),
                 ): selector.NumberSelector(selector.NumberSelectorConfig(min=5, max=120, mode=selector.NumberSelectorMode.BOX)),
             }
         )
