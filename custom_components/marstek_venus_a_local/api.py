@@ -31,28 +31,54 @@ class MarstekVenusAApi:
 
     async def async_fetch_all(self, pv1_factor: float) -> dict[str, Any]:
         """Fetch the validated live values used by the integration."""
-        es = await self._async_request(METHOD_ES_STATUS)
-        pv = await self._async_request(METHOD_PV_STATUS)
-        bat = await self._async_request(METHOD_BAT_STATUS)
-        em = await self._async_request(METHOD_EM_STATUS)
-        mode = await self._async_request(METHOD_ES_MODE)
-        wifi = await self._async_request(METHOD_WIFI_STATUS)
+        responses = {}
+        errors = {}
+        for method in (
+            METHOD_PV_STATUS,
+            METHOD_BAT_STATUS,
+            METHOD_EM_STATUS,
+            METHOD_ES_STATUS,
+            METHOD_ES_MODE,
+            METHOD_WIFI_STATUS,
+        ):
+            try:
+                responses[method] = await self._async_request(method)
+            except MarstekApiError as err:
+                responses[method] = {}
+                errors[method] = str(err)
 
-        def pv_power(index: int) -> float:
-            raw = pv.get(f"pv{index}_power", 0)
+        if len(errors) == 6:
+            raise MarstekApiError("; ".join(errors.values()))
+
+        es = responses[METHOD_ES_STATUS]
+        pv = responses[METHOD_PV_STATUS]
+        bat = responses[METHOD_BAT_STATUS]
+        em = responses[METHOD_EM_STATUS]
+        mode = responses[METHOD_ES_MODE]
+        wifi = responses[METHOD_WIFI_STATUS]
+
+        def pv_power(index: int) -> float | None:
+            raw = pv.get(f"pv{index}_power")
+            if raw is None:
+                return None
             if index == 1:
                 return round(float(raw) * pv1_factor, 2)
             return float(raw)
 
+        pv_values = [pv_power(index) for index in range(1, 5)]
+        pv_total = round(sum(value for value in pv_values if value is not None), 2) if any(value is not None for value in pv_values) else None
+
         return {
+            "_received_count": 6 - len(errors),
+            "_errors": errors,
             "battery_soc": es.get("bat_soc", bat.get("soc")),
             "battery_capacity_wh": es.get("bat_cap"),
             "battery_temperature": bat.get("bat_temp"),
-            "pv1_power": pv_power(1),
-            "pv2_power": pv_power(2),
-            "pv3_power": pv_power(3),
-            "pv4_power": pv_power(4),
-            "pv_power_total": round(pv_power(1) + pv_power(2) + pv_power(3) + pv_power(4), 2),
+            "pv1_power": pv_values[0],
+            "pv2_power": pv_values[1],
+            "pv3_power": pv_values[2],
+            "pv4_power": pv_values[3],
+            "pv_power_total": pv_total,
             "grid_power": es.get("ongrid_power"),
             "offgrid_power": es.get("offgrid_power"),
             "meter_total_power": em.get("total_power"),

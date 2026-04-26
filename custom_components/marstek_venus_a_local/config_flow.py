@@ -26,8 +26,8 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     api = MarstekVenusAApi(host=data[CONF_DEVICE_HOST], port=data[CONF_UDP_PORT])
     result = await api.async_fetch_all(pv1_factor=data[CONF_PV1_FACTOR])
-    if result["battery_soc"] is None:
-        raise MarstekApiError("Device answered but battery_soc is missing")
+    if result["_received_count"] == 0:
+        raise MarstekApiError("Device did not answer any local API call")
     return {"title": f"Marstek Venus A ({data[CONF_DEVICE_HOST]})"}
 
 
